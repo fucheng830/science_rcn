@@ -8,6 +8,7 @@ import networkx as nx
 from scipy.spatial import distance, cKDTree
 
 from science_rcn.preproc import Preproc
+import pdb
 
 LOG = logging.getLogger(__name__)
 
@@ -45,6 +46,7 @@ def train_image(img, perturb_factor=2.):
     frcs = sparsify(bu_msg)
     # Lateral learning (cf. 5.2)
     graph, edge_factors = learn_laterals(frcs, bu_msg, perturb_factor=perturb_factor)
+#     pdb.set_trace()
     return ModelFactors(frcs, edge_factors, graph)
 
 
@@ -188,3 +190,16 @@ def adjust_edge_perturb_radii(frcs,
             graph.edge[n1][n2]['perturb_radius'] = lower
             total_rounding_error = round_down_error
     return graph
+
+if __name__ == '__main__':
+    from scipy.misc import imresize
+    from scipy.ndimage import imread
+    
+    filepath = '../data/MNIST/training/0/58121.bmp'
+    image_arr = imresize(imread(filepath), (112, 112))
+    img = np.pad(image_arr,
+                 pad_width=tuple([(p, p) for p in (44, 44)]),
+                 mode='constant', constant_values=0)
+    # img, category
+    print img.shape
+    train_image(img, perturb_factor=2.)

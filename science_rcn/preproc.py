@@ -1,3 +1,4 @@
+#coding:utf-8
 """A pre-processing layer of the RCN model. See Sec S8.1 for details.
 """
 import logging
@@ -5,6 +6,8 @@ import numpy as np
 from scipy.ndimage import maximum_filter
 from scipy.ndimage.filters import gaussian_filter
 from scipy.signal import fftconvolve
+import matplotlib.pyplot as plt
+import pdb
 
 LOG = logging.getLogger(__name__)
 
@@ -36,7 +39,7 @@ class Preproc(object):
                  num_orients=16,
                  filter_scale=4.,
                  cross_channel_pooling=False):
-        self.num_orients = num_orients
+        self.num_orients = num_orients #过滤器数量
         self.filter_scale = filter_scale
         self.cross_channel_pooling = cross_channel_pooling
         self.suppression_masks = generate_suppression_masks(filter_scale=filter_scale, 
@@ -59,13 +62,22 @@ class Preproc(object):
             Shape is (num_feats, rows, cols)
         """
         filtered = np.zeros((len(self.filters),) + img.shape, dtype=np.float32)
+#         fig, ax = plt.subplots(nrows=len(self.filters)+1, figsize=(16,9*len(self.filters))) # 画图
         for i, kern in enumerate(self.filters):
             filtered[i] = fftconvolve(img, kern, mode='same')
+#             ax[i].imshow(filtered[i])
+#         ax[-1].imshow(img)
+#         plt.show()
         localized = local_nonmax_suppression(filtered, self.suppression_masks)
         # Threshold and binarize
         localized *= (filtered / brightness_diff_threshold).clip(0, 1)
         localized[localized < 1] = 0
-
+        
+#         fig, ax = plt.subplots(nrows=len(self.filters),figsize=(16,9*len(self.filters)))
+#         for i in range(localized.shape[0]):
+#             ax[i].imshow(localized[i])
+#         plt.show()
+        
         if self.cross_channel_pooling:
             pooled_channel_weights = [(0, 1), (-1, 1), (1, 1)]
             pooled_channels = [-np.ones_like(sf) for sf in localized]
@@ -81,6 +93,11 @@ class Preproc(object):
             bu_msg = localized
         # Setting background to -1
         bu_msg[bu_msg == 0] = -1.
+        
+#         fig, ax = plt.subplots(nrows=len(self.filters),figsize=(16,9*len(self.filters)))
+#         for i in range(localized.shape[0]):
+#             ax[i].imshow(bu_msg[i])
+#         plt.show()
         return bu_msg
 
     @property
@@ -101,12 +118,17 @@ def get_gabor_filters(size=21, filter_scale=4., num_orients=16, weights=False):
         size = 2 * np.ceil(np.sqrt(2.) * filter_scale) + 1
         alt = np.zeros((int(size), int(size)), np.float32)
         alt[int(size // 2), int(size // 2)] = 1
-        gaussian = gaussian_filter(alt, filter_scale / np.sqrt(2.), mode='constant')
+        gaussian = gaussian_filter(alt, filter_scale / np.sqrt(2.), mode='constant') #高斯过滤器
         gaussian[gaussian < 0.05 * gaussian.max()] = 0
         return gaussian
-
+    
+#     fig,ax = plt.subplots(nrows=num_orients+1,figsize=(16,9*num_orients))
+    
     gaussian = _get_sparse_gaussian()
+#     ax[0].imshow(gaussian)
+    
     filts = []
+    i=1
     for angle in np.linspace(0., 2 * np.pi, num_orients, endpoint=False):
         acts = np.zeros((size, size), np.float32)
         x, y = np.cos(angle) * filter_scale, np.sin(angle) * filter_scale
@@ -116,7 +138,10 @@ def get_gabor_filters(size=21, filter_scale=4., num_orients=16, weights=False):
         filt /= np.abs(filt).sum()  # Normalize to ensure the maximum output is 1
         if weights:
             filt = np.abs(filt)
+#         ax[i].imshow(filt)
+        i+=1
         filts.append(filt)
+#     plt.show()
     return filts
 
 
@@ -157,6 +182,8 @@ def local_nonmax_suppression(filtered, suppression_masks, num_orients=16):
     localized : numpy.ndarray
         Result of oriented non-max suppression.
     """
+#     fig, ax = plt.subplots(nrows=num_orients,figsize=(16,9*num_orients)) # 画图
+    
     localized = np.zeros_like(filtered)
     cross_orient_max = filtered.max(0)
     filtered[filtered < 0] = 0
@@ -164,4 +191,8 @@ def local_nonmax_suppression(filtered, suppression_masks, num_orients=16):
         competitor_maxs = maximum_filter(layer, footprint=suppress_mask, mode='nearest')
         localized[i] = competitor_maxs <= layer
     localized[cross_orient_max > filtered] = 0
+    
+#     for i in range(localized.shape[0]):
+#         ax[i].imshow(localized[i])
+    plt.show()
     return localized
